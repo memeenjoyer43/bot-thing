@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Anti-NSFW Bot Online", 200
+    return "Bot Online", 200
 
 @app.route('/health')
 def health():
