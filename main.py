@@ -6,6 +6,7 @@ import io
 import os
 import logging
 import time
+import requests
 from threading import Thread
 from flask import Flask
 from dotenv import load_dotenv
@@ -95,6 +96,16 @@ async def on_message(message):
 def run_flask():
     """Start Flask server for Railway"""
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+
+def keep_alive():
+    while True:
+        try:
+            requests.get("https://your-project-name.up.railway.app/health", timeout=5)
+            time.sleep(300)  # Ping every 5 minutes
+        except:
+            pass
+
+Thread(target=keep_alive, daemon=True).start()
 
 def run_bot():
     """Run bot with auto-restart"""
