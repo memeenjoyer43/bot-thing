@@ -6,7 +6,6 @@ import io
 import os
 import logging
 import time
-import requests
 from threading import Thread
 from flask import Flask
 from dotenv import load_dotenv
@@ -15,7 +14,10 @@ from dotenv import load_dotenv
 app = Flask(__name__)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -53,7 +55,10 @@ async def on_message(message):
     for attachment in message.attachments:
         if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif']):
             try:
+                # Download the image
                 image_data = await attachment.read()
+                
+                # Check with SightEngine
                 files = {'media': io.BytesIO(image_data)}
                 params = {
                     'models': 'nudity-2.0,wad,offensive,gore',
@@ -61,51 +66,53 @@ async def on_message(message):
                     'api_secret': SIGHTENGINE_SECRET
                 }
 
+                logger.info(f"Checking image: {attachment.url}")
                 response = requests.post(
                     'https://api.sightengine.com/1.0/check.json',
                     files=files,
                     data=params,
-                    timeout=10
+                    timeout=15  # Increased timeout
                 )
                 response.raise_for_status()
                 result = response.json()
+                logger.info(f"API Result: {result}")
 
-                # NSFW detection thresholds
-                if (result.get('nudity', {}).get('sexual_activity', 0) > 0.5 or
-                    result.get('nudity', {}).get('sexual_display', 0) > 0.4 or
-                    result.get('weapon', 0) > 0.5 or
-                    result.get('drugs', 0) > 0.5):
+                # Enhanced NSFW detection
+                nudity = result.get('nudity', {})
+                if (nudity.get('sexual_activity', 0) > 0.4 or  # Lowered threshold
+                    nudity.get('sexual_display', 0) > 0.3 or
+                    nudity.get('suggestive', 0) > 0.5 or
+                    result.get('weapon', 0) > 0.4 or
+                    result.get('drugs', 0) > 0.4):
                     
                     await message.delete()
                     try:
                         await message.author.kick(reason="NSFW content detected")
+                        logger.info(f"Kicked user {message.author} for NSFW content")
                         await message.channel.send(
                             f"🚨 {message.author.mention} was kicked for NSFW content",
                             delete_after=10
                         )
                     except discord.Forbidden:
-                        logger.warning("Missing kick permissions")
+                        logger.warning(f"Missing permissions to kick {message.author}")
+                    except Exception as e:
+                        logger.error(f"Kick error: {e}")
 
             except requests.exceptions.RequestException as e:
-                logger.error(f"SightEngine API error: {e}")
+                logger.error(f"SightEngine API request failed: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error: {e}")
+                logger.error(f"Image processing error: {e}")
 
     await bot.process_commands(message)
 
 def run_flask():
     """Start Flask server for Railway"""
+    # Disable Flask's startup message
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
-def keep_alive():
-    while True:
-        try:
-            requests.get("https://your-project-name.up.railway.app/health", timeout=5)
-            time.sleep(300)  # Ping every 5 minutes
-        except:
-            pass
-
-Thread(target=keep_alive, daemon=True).start()
 
 def run_bot():
     """Run bot with auto-restart"""
@@ -113,7 +120,8 @@ def run_bot():
         try:
             bot.run(DISCORD_TOKEN)
         except Exception as e:
-            logger.error(f"Bot crashed: {e}. Restarting in 10 seconds...")
+            logger.error(f"Bot crashed: {e}")
+            logger.info("Restarting in 10 seconds...")
             time.sleep(10)
 
 if __name__ == '__main__':
@@ -121,5 +129,5 @@ if __name__ == '__main__':
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    # Start bot with auto-restart
+    # Start the bot
     run_bot()
