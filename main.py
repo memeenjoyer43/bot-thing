@@ -79,11 +79,11 @@ async def on_message(message):
 
                 # Enhanced NSFW detection
                 nudity = result.get('nudity', {})
-                if (nudity.get('sexual_activity', 0) > 0.4 or  # Lowered threshold
-                    nudity.get('sexual_display', 0) > 0.3 or
-                    nudity.get('suggestive', 0) > 0.5 or
-                    result.get('weapon', 0) > 0.4 or
-                    result.get('drugs', 0) > 0.4):
+                if (nudity.get('sexual_activity', 0) > 0.2 or  # Lowered from 0.4
+                    nudity.get('sexual_display', 0) > 0.15 or  # Lowered from 0.3
+                    nudity.get('suggestive', 0) > 0.3 or       # New check
+                    result.get('weapon', 0) > 0.3 or
+                    result.get('drugs', 0) > 0.3):
                     
                     await message.delete()
                     try:
